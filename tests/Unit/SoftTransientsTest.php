@@ -16,9 +16,9 @@ namespace Alley\WP\Tests\Unit;
 
 use Mantle\Testkit\Test_Case;
 
-use function Alley\WP\SoftTransients\get_soft_transient;
-use function Alley\WP\SoftTransients\set_soft_transient;
-use function Alley\WP\SoftTransients\delete_soft_transient;
+use function Alley\WP\Soft_Transients\get_soft_transient;
+use function Alley\WP\Soft_Transients\set_soft_transient;
+use function Alley\WP\Soft_Transients\delete_soft_transient;
 
 /**
  * Tests the SoftTransients functionality.

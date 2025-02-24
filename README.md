@@ -29,8 +29,8 @@ In `get_github_orgs()`, if the transient is not available (e.g. this is the firs
 If the transient is available, `get_github_orgs()` will return organization data indefinitely, even past the expiration time. If this function is called after the soft transient has expired, the Soft Transients library will schedule a cron task to run immediately (`transient_refresh_github_orgs`) which we then hook into to update the transient data.
 
 ```php
-use function Alley\WP\SoftTransients\get_soft_transient;
-use function Alley\WP\SoftTransients\set_soft_transient;
+use function Alley\WP\Soft_Transients\get_soft_transient;
+use function Alley\WP\Soft_Transients\set_soft_transient;
 
 function get_github_orgs_from_api() {
   $request = wp_remote_get( 'https://api.github.com/organizations' );
@@ -48,7 +48,16 @@ function get_github_orgs() {
   return get_soft_transient( 'github_orgs' ) ?: get_github_orgs_from_api();
 }
 
-add_action( 'transient_refresh_github_orgs', 'get_github_orgs_from_api' );
+function refresh_github_orgs_cron_task( $transient_key ) {
+  $response = get_github_orgs_from_api();
+  if ( is_wp_error( $response ) ) {
+    // If the response is an error, it's necessary to schedule a new cron event or else the
+    // transient will never update. We can schedule this for whenever makes sense for the
+    // given service, e.g. one minute from now.
+    wp_schedule_single_event( time() + MINUTE_IN_SECONDS, current_action(), [ $transient_key ] );
+  }
+}
+add_action( 'transient_refresh_github_orgs', 'refresh_github_orgs_cron_task' );
 ```
 
 ### Caveats

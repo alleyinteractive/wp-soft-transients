@@ -47,7 +47,7 @@
     },
     "wordpress-autoloader": {
       "autoload": {
-        "Alley\\WP\\": "src/"
+        "Alley\\WP\\Soft_Transients\\": "src/"
       }
     }
   },
