@@ -10,7 +10,7 @@
     }
   ],
   "require": {
-    "php": "^8.3",
+    "php": "^8.2",
     "alleyinteractive/composer-wordpress-autoloader": "^1.0.0"
   },
   "require-dev": {
