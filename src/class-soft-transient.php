@@ -18,14 +18,14 @@ class Soft_Transient {
 	 *
 	 * @var null|string
 	 */
-	public ?string $cron_hook = null;
+	private ?string $cron_hook = null;
 
 	/**
 	 * Arguments to pass to the cron event.
 	 *
 	 * @var array<mixed>
 	 */
-	public array $cron_args = [];
+	private array $cron_args = [];
 
 	/**
 	 * Soft_Transient constructor.
@@ -42,7 +42,7 @@ class Soft_Transient {
 	 *
 	 * @return string
 	 */
-	private function get_cron_hook(): string {
+	public function get_cron_hook(): string {
 		return $this->cron_hook ?? 'transient_refresh_' . $this->key;
 	}
 
@@ -102,13 +102,30 @@ class Soft_Transient {
 		$expiration = intval( $transient['expiration'] );
 		if ( ! empty( $expiration ) && $expiration <= time() ) {
 			// Cache needs to be updated.
-			if ( ! empty( $transient['status'] ) && 'ok' === $transient['status'] ) {
+			if ( ! empty( $transient['status'] ) && (
+				'ok' === $transient['status']
+				|| (
+					// If the transient is still loading, it's been an hour since it expired, and
+					// the cron event isn't scheduled, then schedule it again.
+					'loading' === $transient['status']
+					&& $expiration <= time() - HOUR_IN_SECONDS
+					&& ! \wp_next_scheduled( $this->get_cron_hook(), $this->get_cron_args() )
+				)
+			) ) {
 				// Schedule the update event.
 				\wp_schedule_single_event( time(), $this->get_cron_hook(), $this->get_cron_args() );
 				$transient['status'] = 'loading';
 
 				// Update the transient to indicate that we've scheduled a reload.
 				\set_transient( $this->key, $transient );
+
+				/**
+				 * Fires when a soft transient is scheduled to refresh.
+				 *
+				 * @param string         $transient_key The key of the transient.
+				 * @param Soft_Transient $transient     This Soft_Transient object.
+				 */
+				\do_action( 'soft_transients_expiration', $this->key, $this );
 			}
 		}
 

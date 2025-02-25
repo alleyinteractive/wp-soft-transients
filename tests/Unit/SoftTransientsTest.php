@@ -183,4 +183,31 @@ final class SoftTransientsTest extends Test_Case {
 		$this->assertTrue( $transient->delete() );
 		$this->assertFalse( wp_next_scheduled( 'transient_refresh_' . $key, [ $key, 'foo', 'bar' ] ) );
 	}
+
+	/**
+	 * Test that the cron event gets rescheduled when in a loading state too long.
+	 */
+	public function test_soft_transient_reschedule_loading() {
+		$key       = 'reschedule_loading';
+		$value     = 'value 7';
+		$transient = ( new Soft_Transient( $key ) );
+
+		// Create the transient and set it to loading.
+		$this->assertTrue( $transient->set( $value, 100 ) );
+		$data           = get_transient( $key );
+		$data['status'] = 'loading';
+		set_transient( $key, $data );
+
+		// Ensure that when the expired transient is accessed, the cron event IS NOT scheduled.
+		$this->assertEquals( $value, $transient->get() );
+		$this->assertFalse( wp_next_scheduled( 'transient_refresh_reschedule_loading', [ $key ] ) );
+
+		// Update the expiration further in the past.
+		$data['expiration'] = time() - DAY_IN_SECONDS;
+		set_transient( $key, $data );
+
+		// Ensure that when the expired transient is accessed now, the cron event IS scheduled.
+		$this->assertEquals( $value, $transient->get() );
+		$this->assertTrue( wp_next_scheduled( 'transient_refresh_reschedule_loading', [ $key ] ) > 0 );
+	}
 }
