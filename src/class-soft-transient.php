@@ -14,35 +14,67 @@ namespace Alley\WP\Soft_Transients;
  */
 class Soft_Transient {
 	/**
-	 * The action to schedule for refreshing the transient.
+	 * The cron hook to schedule for refreshing the transient.
 	 *
 	 * @var null|string
 	 */
-	public ?string $action = null;
+	public ?string $cron_hook = null;
 
+	/**
+	 * Arguments to pass to the cron event.
+	 *
+	 * @var array<mixed>
+	 */
+	public array $cron_args = [];
+
+	/**
+	 * Soft_Transient constructor.
+	 *
+	 * @param string $key The transient key.
+	 */
 	public function __construct(
 		public string $key
 	) {
 	}
 
 	/**
-	 * Get the action to schedule for refreshing the transient.
+	 * Get the cron hook to schedule for refreshing the transient.
 	 *
 	 * @return string
 	 */
-	private function get_action(): string {
-		return $this->action ?? 'transient_refresh_' . $this->key;
+	private function get_cron_hook(): string {
+		return $this->cron_hook ?? 'transient_refresh_' . $this->key;
 	}
 
 	/**
-	 * Set the action to schedule for refreshing the transient.
+	 * Set the cron hook to schedule for refreshing the transient.
 	 *
-	 * @param string $action The action to schedule for refreshing the transient.
+	 * @param string $hook The cron hook to schedule for refreshing the transient.
 	 * @return self
 	 */
-	public function set_action( string $action ): self {
-		$this->action = $action;
+	public function set_cron_hook( string $hook ): self {
+		$this->cron_hook = $hook;
 		return $this;
+	}
+
+	/**
+	 * Set the arguments to pass to the cron event.
+	 *
+	 * @param array<mixed> $args The arguments to pass to the cron event.
+	 * @return self
+	 */
+	public function set_cron_args( array $args ): self {
+		$this->cron_args = $args;
+		return $this;
+	}
+
+	/**
+	 * Get the arguments to pass to the cron event.
+	 *
+	 * @return array<mixed>
+	 */
+	public function get_cron_args(): array {
+		return array_merge( [ $this->key ], $this->cron_args );
 	}
 
 	/**
@@ -53,7 +85,6 @@ class Soft_Transient {
 	 * If the transient does not exist or does not have a value, then the return value
 	 * will be false.
 	 *
-	 * @param string $transient_key Transient name. Expected to not be SQL-escaped.
 	 * @return mixed Value of transient.
 	 */
 	public function get() {
@@ -72,12 +103,8 @@ class Soft_Transient {
 		if ( ! empty( $expiration ) && $expiration <= time() ) {
 			// Cache needs to be updated.
 			if ( ! empty( $transient['status'] ) && 'ok' === $transient['status'] ) {
-				// Schedule the update action.
-				\wp_schedule_single_event(
-					time(),
-					$transient['action'] ?? $this->get_action(),
-					[ $this->key ]
-				);
+				// Schedule the update event.
+				\wp_schedule_single_event( time(), $this->get_cron_hook(), $this->get_cron_args() );
 				$transient['status'] = 'loading';
 
 				// Update the transient to indicate that we've scheduled a reload.
@@ -95,9 +122,9 @@ class Soft_Transient {
 	 * You do not need to serialize values. If the value needs to be serialized, then
 	 * it will be serialized before it is set.
 	 *
-	 * @param mixed  $value      Transient value. Must be serializable if non-scalar. Expected to
-	 *                           not be SQL-escaped.
-	 * @param int    $expiration Optional. Time until expiration in seconds, default 0.
+	 * @param mixed $value      Transient value. Must be serializable if non-scalar. Expected to
+	 *                          not be SQL-escaped.
+	 * @param int   $expiration Optional. Time until expiration in seconds, default 0.
 	 * @return bool False if value was not set and true if value was set.
 	 */
 	public function set( $value, int $expiration = 0 ): bool {
@@ -108,7 +135,6 @@ class Soft_Transient {
 			'expiration' => $expiration + time(),
 			'data'       => $value,
 			'status'     => 'ok',
-			'action'     => $this->action,
 		];
 
 		return \set_transient( $this->key, $data );
@@ -121,11 +147,12 @@ class Soft_Transient {
 	 * @return bool true if successful, false otherwise
 	 */
 	public function delete(): bool {
-		$action = $this->get_action();
+		$hook      = $this->get_cron_hook();
+		$cron_args = $this->get_cron_args();
 
-		$timestamp = \wp_next_scheduled( $action, [ $this->key ] );
+		$timestamp = \wp_next_scheduled( $hook, $cron_args );
 		if ( $timestamp ) {
-			\wp_unschedule_event( $timestamp, $action, [ $this->key ] );
+			\wp_unschedule_event( $timestamp, $hook, $cron_args );
 		}
 
 		return \delete_transient( $this->key );

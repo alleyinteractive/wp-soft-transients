@@ -14,6 +14,7 @@ declare( strict_types = 1 );
 
 namespace Alley\WP\Tests\Unit;
 
+use Alley\WP\Soft_Transients\Soft_Transient;
 use Mantle\Testkit\Test_Case;
 
 use function Alley\WP\Soft_Transients\get_soft_transient;
@@ -63,24 +64,22 @@ final class SoftTransientsTest extends Test_Case {
 	}
 
 	/**
-	 * Test default actions.
+	 * Test default cron hooks.
 	 */
-	public function test_soft_transient_default_actions(): void {
-		$key   = 'default_actions';
+	public function test_soft_transient_default_cron_hooks(): void {
+		$key   = 'default_cron_hooks';
 		$value = 'value 2';
 
 		$this->assertTrue( set_soft_transient( $key, $value, 100 ) );
 		$this->assertEquals( $value, get_soft_transient( $key ) );
 
 		// Get the actual stored value of the transient and expire it.
-		$stored_value = get_transient( $key );
-		$this->assertTrue( array_key_exists( 'action', $stored_value ) );
-		$this->assertEquals( null, $stored_value['action'] );
+		$stored_value               = get_transient( $key );
 		$stored_value['expiration'] = time() - 1;
 		set_transient( $key, $stored_value );
 
 		// Ensure that when the expired transient is accessed, deletion is
-		// scheduled with the default action.
+		// scheduled with the default hook.
 		$this->assertEquals( $value, get_soft_transient( $key ) );
 		$this->assertTrue( wp_next_scheduled( 'transient_refresh_' . $key, [ $key ] ) > 0 );
 		$this->assertTrue( delete_soft_transient( $key ) );
@@ -129,5 +128,59 @@ final class SoftTransientsTest extends Test_Case {
 
 		$this->assertEquals( $value2, get_soft_transient( $key ) );
 		$this->assertTrue( wp_next_scheduled( 'transient_refresh_' . $key, [ $key ] ) > 0 );
+	}
+
+	/**
+	 * Test setting transients with a custom cron hook.
+	 */
+	public function test_soft_transient_custom_cron_hook() {
+		$key   = 'custom_hook';
+		$value = 'value 5';
+
+		$transient = ( new Soft_Transient( $key ) )
+			->set_cron_hook( 'test_soft_transient_0' );
+
+		// Create the transient with a custom hook.
+		$this->assertTrue( $transient->set( $value, 100 ) );
+		$this->assertEquals( $value, get_soft_transient( $key ) );
+
+		// Get the actual stored value of the transient and expire it.
+		$stored_value               = get_transient( $key );
+		$stored_value['expiration'] = time() - 1;
+		set_transient( $key, $stored_value );
+
+		// Ensure that when the expired transient is accessed, deletion is
+		// scheduled with the custom hook.
+		$this->assertEquals( $value, $transient->get() );
+		$this->assertTrue( wp_next_scheduled( 'test_soft_transient_0', [ $key ] ) > 0 );
+		$this->assertTrue( $transient->delete() );
+		$this->assertFalse( wp_next_scheduled( 'test_soft_transient_0', [ $key ] ) );
+	}
+
+	/**
+	 * Test setting transients with custom cron args.
+	 */
+	public function test_soft_transient_custom_cron_args() {
+		$key   = 'custom_cron_args';
+		$value = 'value 6';
+
+		$transient = ( new Soft_Transient( $key ) )
+			->set_cron_args( [ 'foo', 'bar' ] );
+
+		// Create the transient with custom cron args.
+		$this->assertTrue( $transient->set( $value, 100 ) );
+		$this->assertEquals( $value, $transient->get( $key ) );
+
+		// Get the actual stored value of the transient and expire it.
+		$stored_value               = get_transient( $key );
+		$stored_value['expiration'] = time() - 1;
+		set_transient( $key, $stored_value );
+
+		// Ensure that when the expired transient is accessed, the cron event is scheduled with the
+		// custom args.
+		$this->assertEquals( $value, $transient->get() );
+		$this->assertTrue( wp_next_scheduled( 'transient_refresh_' . $key, [ $key, 'foo', 'bar' ] ) > 0 );
+		$this->assertTrue( $transient->delete() );
+		$this->assertFalse( wp_next_scheduled( 'transient_refresh_' . $key, [ $key, 'foo', 'bar' ] ) );
 	}
 }
