@@ -20,6 +20,16 @@ composer require alleyinteractive/wp-soft-transients
 
 Soft Transients provides a wrapper for [WordPress's Transients API](https://developer.wordpress.org/apis/transients/), modifying its behavior such that the transient data may remain accessible after its expiration. Soft Transients stores the transient data alongside metadata, including the desired expiration time. After the expiration, stale data is returned and a cron task is enqueued. When that cron task executes, an application may then choose to take some action to refresh the expired data.
 
+### Helper Functions
+
+The library provides a class to interact with the transients, as well as a set of simplified drop-in replacement functions fully compatible with the WordPress Transients API. The helper functions are:
+
+- `get_soft_transient( $transient_key )`: Retrieve the value of a transient.
+- `set_soft_transient( $transient_key, $value, $expiration )`: Set the value of a transient.
+- `delete_soft_transient( $transient_key )`: Delete a transient.
+
+While the helper functions are convenient and easy to use, they do not provide the full functionality of the Soft Transients library. If you need to set custom cron hooks or pass custom arguments to the cron task, you should use the `Soft_Transient` class directly.
+
 ### Example
 
 In this example, we're getting organizations from GitHub's API. We have a function to get the organizations from the API, and we have a function to get the organizations from the transient (`get_github_orgs()`).
@@ -29,8 +39,8 @@ In `get_github_orgs()`, if the transient is not available (e.g. this is the firs
 If the transient is available, `get_github_orgs()` will return organization data indefinitely, even past the expiration time. If this function is called after the soft transient has expired, the Soft Transients library will schedule a cron task to run immediately (`transient_refresh_github_orgs`) which we then hook into to update the transient data.
 
 ```php
-use function Alley\WP\SoftTransients\get_soft_transient;
-use function Alley\WP\SoftTransients\set_soft_transient;
+use function Alley\WP\Soft_Transients\get_soft_transient;
+use function Alley\WP\Soft_Transients\set_soft_transient;
 
 function get_github_orgs_from_api() {
   $request = wp_remote_get( 'https://api.github.com/organizations' );
@@ -48,12 +58,53 @@ function get_github_orgs() {
   return get_soft_transient( 'github_orgs' ) ?: get_github_orgs_from_api();
 }
 
-add_action( 'transient_refresh_github_orgs', 'get_github_orgs_from_api' );
+function refresh_github_orgs_cron_task( $transient_key ) {
+  $response = get_github_orgs_from_api();
+  if ( is_wp_error( $response ) ) {
+    // If the response is an error, schedule a new cron event. We can schedule this for whenever
+    // makes sense for the given service, e.g. one minute from now.
+    wp_schedule_single_event( time() + MINUTE_IN_SECONDS, current_action(), [ $transient_key ] );
+  }
+}
+add_action( 'transient_refresh_github_orgs', 'refresh_github_orgs_cron_task' );
+```
+
+### Custom Cron Hooks and Arguments
+
+This library allows you to set a custom cron hooks and/or pass custom arguments to the cron task. This can be useful if you're working with a variety of transient keys (e.g. a hash made up of some data like a url and arguments). In order to use this fuctionality, you can use the `Soft_Transient` class directly.
+
+```php
+// Create the transient object.
+$key       = 'my_request_' . md5( serialize( [ $url, $args ] ) );
+$transient = ( new Soft_Transient( $key ) )
+  ->set_cron_args( [ $url, $args ] )
+  ->set_cron_hook( 'my_custom_cron_event' );
+
+// Set a value.
+$transient->set( get_remote_data( $url, $args ), HOUR_IN_SECONDS );
+
+// Get a value.
+$transient->get();
+
+// Delete a value.
+$transient->delete();
+
+// Refresh a value.
+add_action(
+  'my_custom_cron_event',
+  function( $transient_key, $url, $args ) use ( $transient ) {
+    $transient = new Soft_Transient( $transient_key );
+    $transient->set( get_remote_data( $url, $args ), HOUR_IN_SECONDS );
+  },
+  10,
+  3
+);
 ```
 
 ### Caveats
 
-It's important to recognize that, as with WordPress's transients API, transients are not guaranteed; it is possible for the transient to not be available _before_ the expiration time. Much like what is done with caching, your code should have a fall back method to re-generate the data if the transient is not available.
+- When the transient has expired, the cron event is scheduled and the metadata is updated to indicate that the state is "loading". During the cron event, you should either successfully update the transient or schedule a new cron event to refresh the transient. If you do not, the transient will remain in the "loading" state. An hour after the expiration, if the soft transient is accessed, is still in the "loading" state, and the cron event is not scheduled, the library will then reschedule the cron event. It will continue to do so every time the soft transient is accessed and the cron event is not scheduled.
+- As with WordPress's transients API, transients are not guaranteed; it is possible for the transient to not be available _before_ the expiration time. Much like what is done with caching, your code should have a fall back method to re-generate the data if the transient is not available.
 
 ## About
 
