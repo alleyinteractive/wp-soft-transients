@@ -61,9 +61,8 @@ function get_github_orgs() {
 function refresh_github_orgs_cron_task( $transient_key ) {
   $response = get_github_orgs_from_api();
   if ( is_wp_error( $response ) ) {
-    // If the response is an error, it's necessary to schedule a new cron event or else the
-    // transient will never update. We can schedule this for whenever makes sense for the
-    // given service, e.g. one minute from now.
+    // If the response is an error, schedule a new cron event. We can schedule this for whenever
+    // makes sense for the given service, e.g. one minute from now.
     wp_schedule_single_event( time() + MINUTE_IN_SECONDS, current_action(), [ $transient_key ] );
   }
 }
@@ -104,7 +103,7 @@ add_action(
 
 ### Caveats
 
-- When the transient has expired, the cron event is scheduled and the metadata is updated to indicate that the state is "loading". During the cron event, you must either successfully update the transient or schedule a new cron event to refresh the transient. If you do not, the transient will remain in the "loading" state indefinitely and will never update.
+- When the transient has expired, the cron event is scheduled and the metadata is updated to indicate that the state is "loading". During the cron event, you should either successfully update the transient or schedule a new cron event to refresh the transient. If you do not, the transient will remain in the "loading" state. An hour after the expiration, if the soft transient is accessed, is still in the "loading" state, and the cron event is not scheduled, the library will then reschedule the cron event. It will continue to do so every time the soft transient is accessed and the cron event is not scheduled.
 - As with WordPress's transients API, transients are not guaranteed; it is possible for the transient to not be available _before_ the expiration time. Much like what is done with caching, your code should have a fall back method to re-generate the data if the transient is not available.
 
 ## About

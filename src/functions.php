@@ -28,7 +28,8 @@ function get_soft_transient( string $transient_key ) {
  * @param string $transient_key Transient name. Expected to not be SQL-escaped.
  * @param mixed  $value         Transient value. Must be serializable if non-scalar. Expected to not
  *                              be SQL-escaped.
- * @param int    $expiration    Optional. Time until expiration in seconds, default 0.
+ * @param int    $expiration    Optional. Time until expiration in seconds, default 0. If the value
+ *                              is 0, this will be a normal transient, not a soft transient.
  * @return bool False if value was not set and true if value was set.
  */
 function set_soft_transient( string $transient_key, $value, int $expiration = 0 ) {
