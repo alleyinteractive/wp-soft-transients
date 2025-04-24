@@ -21,6 +21,13 @@ class Soft_Transient {
 	private ?string $cron_hook = null;
 
 	/**
+	 * The number of minutes to wait before retrying a "loading" transient.
+	 *
+	 * @var null|int
+	 */
+	private ?int $retry_minutes = 60;
+
+	/**
 	 * Arguments to pass to the cron event.
 	 *
 	 * @var array<mixed>
@@ -54,6 +61,17 @@ class Soft_Transient {
 	 */
 	public function set_cron_hook( string $hook ): self {
 		$this->cron_hook = $hook;
+		return $this;
+	}
+
+	/**
+	 * Set the number of minutes to wait before retrying a "loading" transient.
+	 *
+	 * @param int $minutes The number of minutes to wait before retrying a "loading" transient.
+	 * @return self
+	 */
+	public function set_retry_minutes( int $minutes ): self {
+		$this->retry_minutes = $minutes;
 		return $this;
 	}
 
@@ -100,15 +118,17 @@ class Soft_Transient {
 
 		// Check if the transient is expired.
 		$expiration = intval( $transient['expiration'] );
+		var_dump( $this->retry_minutes );
 		if ( ! empty( $expiration ) && $expiration <= time() ) {
 			// Cache needs to be updated.
 			if ( ! empty( $transient['status'] ) && (
 				'ok' === $transient['status']
 				|| (
-					// If the transient is still loading, it's been an hour since it expired, and
+					// If the transient is still loading, it's been a specified amount
+					// of time (default one hour) since it expired, and
 					// the cron event isn't scheduled, then schedule it again.
 					'loading' === $transient['status']
-					&& $expiration <= time() - HOUR_IN_SECONDS
+					&& $expiration <= time() - $this->retry_minutes * MINUTE_IN_SECONDS
 					&& ! \wp_next_scheduled( $this->get_cron_hook(), $this->get_cron_args() )
 				)
 			) ) {
