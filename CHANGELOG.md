@@ -6,6 +6,10 @@ This library adheres to [Semantic Versioning](https://semver.org/) and [Keep a C
 
 Nothing yet.
 
+## 1.0.1
+
+Enhancement: Allow override of retry time with set_retry_minutes()
+
 ## 1.0.0
 
 Initial release.
