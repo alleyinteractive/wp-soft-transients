@@ -118,7 +118,6 @@ class Soft_Transient {
 
 		// Check if the transient is expired.
 		$expiration = intval( $transient['expiration'] );
-		var_dump( $this->retry_minutes );
 		if ( ! empty( $expiration ) && $expiration <= time() ) {
 			// Cache needs to be updated.
 			if ( ! empty( $transient['status'] ) && (
